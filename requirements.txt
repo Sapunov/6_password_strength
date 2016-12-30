@@ -1,0 +1,2 @@
+requests
+-e git+https://github.com/Sapunov/cacher.git#egg=cacher
