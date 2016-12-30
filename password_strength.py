@@ -8,14 +8,15 @@ import string
 import cacher as cache
 
 CACHE_LIFETIME = 60 * 60 * 24 * 90
-PASSWORDS_BLACKLIST = "https://raw.githubusercontent.com/danielmiessler/SecLists/" \
-    "master/Passwords/10k_most_common.txt"
+PASSWORDS_BLACKLIST = "https://raw.githubusercontent.com/danielmiessler/" \
+    "SecLists/master/Passwords/10k_most_common.txt"
 
 PASSWORD_OK_LEN = 8
 LOWERCASE = string.ascii_lowercase + "абвгдеёжзийклмнопрстуфхцчшщьыъэюя"
 UPPERCASE = string.ascii_uppercase + "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЬЫЪЭЮЯ"
 
 cache.set_cache_directory(os.path.join(os.path.dirname(__file__), ".cache"))
+
 
 class BlacklistError(Exception):
     pass
@@ -112,7 +113,8 @@ def main():
 
     pass_strength, weaks = get_password_strength(password)
 
-    print("Сложность Вашего пароля: %s/10" % (pass_strength if pass_strength <= 10 else 10))
+    print("Сложность Вашего пароля: %s/10" % (
+        pass_strength if pass_strength <= 10 else 10))
 
     if weaks:
         print("\nЧто можно улучшить в Вашем пароле:")
