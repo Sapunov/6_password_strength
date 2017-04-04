@@ -1,13 +1,11 @@
-#!/usr/bin/env python3
-
-import os
-import requests
 import getpass
 import string
+import requests
+import requests_cache
 
-import cacher as cache
 
-CACHE_LIFETIME = 60 * 60 * 24 * 90
+requests_cache.install_cache('.cache', expire_after=60 * 60 * 24 * 90)
+
 PASSWORDS_BLACKLIST = "https://raw.githubusercontent.com/danielmiessler/" \
     "SecLists/master/Passwords/10k_most_common.txt"
 
@@ -22,8 +20,6 @@ MESSAGES = [
     "Добавьте специальные символы",
     "Увеличьте длину пароля"
 ]
-
-cache.set_cache_directory(os.path.join(os.path.dirname(__file__), ".cache"))
 
 
 class BlacklistError(Exception):
@@ -64,22 +60,17 @@ def check_spec_symbols(password):
 
 def check_blacklist(password):
 
-    blacklist = cache.get("blacklist")
+    try:
+        res = requests.get(PASSWORDS_BLACKLIST)
+    except requests.RequestException as e:
+        raise BlacklistError(e)
 
-    if not blacklist:
-        try:
-            res = requests.get(PASSWORDS_BLACKLIST)
-        except requests.RequestException as e:
-            raise BlacklistError(e)
+    if res.status_code != 200:
+        raise BlacklistError("Status code: %s", res.status_code)
 
-        if res.status_code != 200:
-            raise BlacklistError("Status code: %s", res.status_code)
+    passwords = [it.strip() for it in res.text.split("\n")]
 
-        passwords = [it.strip() for it in res.text.split("\n")]
-
-        blacklist = cache.put("blacklist", passwords, CACHE_LIFETIME)
-
-    return 0 if password in blacklist else 5
+    return 0 if password in passwords else 5
 
 
 def check_length(password):
