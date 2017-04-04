@@ -4,22 +4,40 @@ import requests
 import requests_cache
 
 
-requests_cache.install_cache('.cache', expire_after=60 * 60 * 24 * 90)
+# Expire after 30 days
+requests_cache.install_cache('.cache', expire_after=60 * 60 * 24 * 30)
 
-PASSWORDS_BLACKLIST = "https://raw.githubusercontent.com/danielmiessler/" \
-    "SecLists/master/Passwords/10k_most_common.txt"
-
-PASSWORD_OK_LEN = 8
-LOWERCASE = string.ascii_lowercase + "абвгдеёжзийклмнопрстуфхцчшщьыъэюя"
-UPPERCASE = string.ascii_uppercase + "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЬЫЪЭЮЯ"
-MESSAGES = [
-    "Вы используете известный пароль! Поменяйте его",
-    "Добавьте цифры",
-    "Добавьте буквы в верхнем регистре",
-    "Добавьте буквы в нижнем регистре",
-    "Добавьте специальные символы",
-    "Увеличьте длину пароля"
-]
+SETTINGS = {
+    "checks": {
+        "blacklist": {
+            "blacklist_url": "https://raw.githubusercontent.com/" \
+                "danielmiessler/SecLists/master/Passwords/10k_most_common.txt",
+            "weight": 5,
+            "error_msg": "!! Изменить его так как используется известный пароль"
+        },
+        "numbers": {
+            "weight": 1,
+            "error_msg": "Добавить цифры"
+        },
+        "upper": {
+            "weight": 1,
+            "error_msg": "Добавить буквы в верхнем регистре"
+        },
+        "lower": {
+            "weight": 1,
+            "error_msg": "Добавить буквы в нижнем регистре"
+        },
+        "spec_symbols": {
+            "weight": 1,
+            "error_msg": "Добавить специальные символы"
+        },
+        "length": {
+            "ok_length": 8,
+            "weight": 2,
+            "error_msg": "Увеличить длину пароля"
+        }
+    }
+}
 
 
 class BlacklistError(Exception):
@@ -28,40 +46,62 @@ class BlacklistError(Exception):
 
 def check_lower(password):
 
-    alph = set(LOWERCASE)
+    params = SETTINGS["checks"]["lower"]
+
+    alph = set(string.ascii_lowercase + "абвгдеёжзийклмнопрстуфхцчшщьыъэюя")
     password = set(password)
 
-    return 1 if len(password - alph) != len(password) else 0
+    if len(password - alph) != len(password):
+        return params["weight"], None
+    else:
+        return 0, params["error_msg"]
 
 
 def check_upper(password):
 
-    alph = set(UPPERCASE)
+    params = SETTINGS["checks"]["upper"]
+
+    alph = set(string.ascii_uppercase + "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЬЫЪЭЮЯ")
     password = set(password)
 
-    return 1 if len(password - alph) != len(password) else 0
+    if len(password - alph) != len(password):
+        return params["weight"], None
+    else:
+        return 0, params["error_msg"]
 
 
 def check_numbers(password):
 
+    params = SETTINGS["checks"]["numbers"]
+
     alph = set(string.digits)
     password = set(password)
 
-    return 1 if len(password - alph) != len(password) else 0
+    if len(password - alph) != len(password):
+        return params["weight"], None
+    else:
+        return 0, params["error_msg"]
 
 
 def check_spec_symbols(password):
 
+    params = SETTINGS["checks"]["spec_symbols"]
+
     alph = set("~!@#$%^&*()_+=-\\|/{}[]`.,")
     password = set(password)
 
-    return 1 if (password - alph) != len(password) else 0
+    if len(password - alph) != len(password):
+        return params["weight"], None
+    else:
+        return 0, params["error_msg"]
 
 
 def check_blacklist(password):
 
+    params = SETTINGS["checks"]["blacklist"]
+
     try:
-        res = requests.get(PASSWORDS_BLACKLIST)
+        res = requests.get(params["blacklist_url"])
     except requests.RequestException as e:
         raise BlacklistError(e)
 
@@ -70,22 +110,26 @@ def check_blacklist(password):
 
     passwords = [it.strip() for it in res.text.split("\n")]
 
-    return 0 if password in passwords else 5
+    if password in passwords:
+        return 0, params["error_msg"]
+    else:
+        return params["weight"], None
 
 
 def check_length(password):
 
-    if len(password) > PASSWORD_OK_LEN:
-        return 1
-    elif len(password) > PASSWORD_OK_LEN * 2:
-        return 2
+    params = SETTINGS["checks"]["length"]
+
+    if len(password) > params["ok_length"]:
+        return params["weight"] // 2, None
+    elif len(password) > params["ok_length"] * 2:
+        return params["weight"], None
     else:
-        return 0
+        return 0, params["error_msg"]
 
 
 def get_password_strength(password):
 
-    weaks = []
     checks = [
         check_blacklist(password),
         check_numbers(password),
@@ -95,11 +139,10 @@ def get_password_strength(password):
         check_length(password)
     ]
 
-    for i in range(len(checks)):
-        if not checks[i]:
-            weaks.append(MESSAGES[i])
-
-    return sum(checks), weaks
+    return (
+        sum([check[0] for check in checks]),
+        [check[1] for check in checks if check[1]]
+    )
 
 
 def main():
@@ -108,8 +151,10 @@ def main():
 
     pass_strength, weaks = get_password_strength(password)
 
-    print("Сложность Вашего пароля: %s/10" % (
-        pass_strength if pass_strength <= 10 else 10))
+    # pass_strength may be > 10, so we need to set the upper limit
+    pass_strength = pass_strength if pass_strength <= 10 else 10
+
+    print("Сложность Вашего пароля: {0}/10".format(pass_strength))
 
     if weaks:
         print("\nЧто можно улучшить в Вашем пароле:")
